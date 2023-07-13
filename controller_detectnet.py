@@ -1312,7 +1312,10 @@ def main():
     num_frames_to_keep = 4
     orientations = generate_all_orientations()
     anchor_orientation = '180-0-1'
-    workload =  [('yolov4', 'count', 'car'),]
+    workload =  [('yolov4', 'count', 'car'),
+('tiny-yolov4', 'count', 'car'),('ssd', 'count', 'car'),('faster-rcnn', 'count', 'car'),
+
+                ]
 
     url = "http://128.112.34.129/cgi-bin/ptzctrl.cgi"
 
@@ -1376,13 +1379,13 @@ def main():
 
     ranks = []
 
-
-
     frame_num = 0
 
+    model_to_detectnet = {}
     # load the object detection network
-    net = detectNet(args.network, sys.argv, args.threshold)
-
+    for q in workload:
+        if q[0] not in model_to_detectnet:
+            model_to_detectnet[q[0]] = detectNet(args.network, sys.argv, args.threshold)
 
     # to properly know which camera to use, make sure to do `ls /dev | grep video`.
     # the input to videocapture is the index corresponding to the connected camera
@@ -1402,12 +1405,6 @@ def main():
         model_to_orientation_to_efficientdet_cars_detected = {}
         model_to_orientation_to_efficientdet_people_detected = {}
 
-
-        model_to_orientation_to_efficientdet_person_count['yolov4'] = {}
-        model_to_orientation_to_efficientdet_car_count['yolov4'] = {}
-        model_to_orientation_to_efficientdet_cars_detected['yolov4'] = {}
-        model_to_orientation_to_efficientdet_people_detected['yolov4'] = {}
-
         for m_idx,m in enumerate(movements):
 
             if m_idx >= len(current_formation):
@@ -1416,36 +1413,42 @@ def main():
             img = Image.fromarray(frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
-            cuda_mem = cudaFromNumpy(frame)
-            detections = net.Detect(cuda_mem, overlay=args.overlay)
-            print(len(detections), ' detected')
-           
-            if current_formation[m_idx] not in model_to_orientation_to_efficientdet_person_count['yolov4']:
-                model_to_orientation_to_efficientdet_person_count['yolov4'][current_formation[m_idx]] = 0
-            if current_formation[m_idx] not in model_to_orientation_to_efficientdet_people_detected['yolov4']:
-                model_to_orientation_to_efficientdet_people_detected['yolov4'][current_formation[m_idx]] = []
+            for m in model_to_detectnet:
+                if m not in model_to_orientation_to_efficientdet_person_count:
+                    model_to_orientation_to_efficientdet_person_count[m] = {}
+                    model_to_orientation_to_efficientdet_car_count[m] = {}
+                    model_to_orientation_to_efficientdet_cars_detected[m] = {}
+                    model_to_orientation_to_efficientdet_people_detected[m] = {}
 
-            if current_formation[m_idx] not in model_to_orientation_to_efficientdet_car_count['yolov4']:
-                model_to_orientation_to_efficientdet_car_count['yolov4'][current_formation[m_idx]] = 0
-            if current_formation[m_idx] not in model_to_orientation_to_efficientdet_cars_detected['yolov4']:
-                model_to_orientation_to_efficientdet_cars_detected['yolov4'][current_formation[m_idx]] = []
-            for idx,d in enumerate(detections):
-                cv2.rectangle(frame,(int(d.Left),int(d.Top)),(int(d.Right),int(d.Bottom)),(0,255,0),2)
-                cv2.putText(frame,coco_classes[d.ClassID],(int(d.Right)+10,int(d.Bottom)),0,0.3,(0,255,0))
-                if d.ClassID == 1:
+                net = model_to_detectnet[m]
+                cuda_mem = cudaFromNumpy(frame)
+                detections = net.Detect(cuda_mem, overlay=args.overlay)
+                print(len(detections), ' detected')
+               
+                if current_formation[m_idx] not in model_to_orientation_to_efficientdet_person_count[m]:
+                    model_to_orientation_to_efficientdet_person_count[m][current_formation[m_idx]] = 0
+                if current_formation[m_idx] not in model_to_orientation_to_efficientdet_people_detected[m]:
+                    model_to_orientation_to_efficientdet_people_detected[m][current_formation[m_idx]] = []
 
-                    model_to_orientation_to_efficientdet_person_count['yolov4'][current_formation[m_idx]] += 1
-                    model_to_orientation_to_efficientdet_people_detected['yolov4'][current_formation[m_idx]].append([d.Left, d.Top, d.Right, d.Bottom]) 
-                elif d.ClassID == 3:
+                if current_formation[m_idx] not in model_to_orientation_to_efficientdet_car_count[m]:
+                    model_to_orientation_to_efficientdet_car_count[m][current_formation[m_idx]] = 0
+                if current_formation[m_idx] not in model_to_orientation_to_efficientdet_cars_detected[m]:
+                    model_to_orientation_to_efficientdet_cars_detected[m][current_formation[m_idx]] = []
+                for idx,d in enumerate(detections):
+                    cv2.rectangle(frame,(int(d.Left),int(d.Top)),(int(d.Right),int(d.Bottom)),(0,255,0),2)
+                    cv2.putText(frame,coco_classes[d.ClassID],(int(d.Right)+10,int(d.Bottom)),0,0.3,(0,255,0))
+                    if d.ClassID == 1:
+                        model_to_orientation_to_efficientdet_person_count[m][current_formation[m_idx]] += 1
+                        model_to_orientation_to_efficientdet_people_detected[m][current_formation[m_idx]].append([d.Left, d.Top, d.Right, d.Bottom]) 
+                    elif d.ClassID == 3:
+                        model_to_orientation_to_efficientdet_car_count[m][current_formation[m_idx]] += 1
+                        model_to_orientation_to_efficientdet_cars_detected[m][current_formation[m_idx]].append([d.Left, d.Top, d.Right, d.Bottom]) 
 
-                    model_to_orientation_to_efficientdet_car_count['yolov4'][current_formation[m_idx]] += 1
-                    model_to_orientation_to_efficientdet_cars_detected['yolov4'][current_formation[m_idx]].append([d.Left, d.Top, d.Right, d.Bottom]) 
-
-    #            roi=frame[int(d.Top):int(d.Bottom),int(d.Left):int(d.Right)]
-    #            cv2.imwrite(str(idx) + '.jpg', roi)
+        #            roi=frame[int(d.Top):int(d.Bottom),int(d.Left):int(d.Right)]
+        #            cv2.imwrite(str(idx) + '.jpg', roi)
 
             command = url + m
-            time.sleep(0.3)
+            time.sleep(0.2)
             cv2.imshow('Video stream ', frame)
         frame_to_model_to_orientation_to_person_count[frame_num] = model_to_orientation_to_efficientdet_person_count
         frame_to_model_to_orientation_to_car_count[frame_num] = model_to_orientation_to_efficientdet_car_count
