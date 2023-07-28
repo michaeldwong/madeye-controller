@@ -55,18 +55,20 @@ pan_dist_to_api_encoding = {
 
 tilt_dist_to_api_encoding = {
     -30 : 'FE60',
-    15 : 'FF20',
+    -15 : 'FF20',
     0: '0000', 
-    15 : '0700',
+    15 : '0070',
     30 :  '0140',
 }
 
 def convert_orientations(center_orientation, infile):
     # For now assume that orientatins don't cross the pan 0 / pan 330 boundary. Center orientations at 180-0-1
-    url = "http://128.112.34.129/cgi-bin/ptzctrl.cgi"
+    url = "http://128.112.92.59/cgi-bin/ptzctrl.cgi"
     main_pan = extract_pan(center_orientation)
     main_tilt = extract_tilt(center_orientation)
 
+    # Center all orientations at pan 180
+    pan_offset = 180 - main_pan
     commands = [ url + "?ptzcmd&abs&24&20&0000&0000" ]
     # Left, middle/up, right, middle/down, middle
     trace = [commands]
@@ -74,10 +76,12 @@ def convert_orientations(center_orientation, infile):
         for line in f.readlines():
             line = line.replace('[', '').replace(']', '').replace('\'', '')
             commands = []
+            print('new line')
             for o in line.split(','):
                 # every orientation is treated as a disposition from center_orientation
                 o = o.strip()
-                pan = extract_pan(o)
+                print('orientation ', o)
+                pan = extract_pan(o) + pan_offset
                 tilt = extract_tilt(o)
                 tilt_dist = find_tilt_dist(main_tilt, tilt)
                 if tilt < main_tilt:
@@ -97,12 +101,14 @@ def convert_orientations(center_orientation, infile):
                 tilt_api_fillin = tilt_dist_to_api_encoding[tilt_dist]
                 commands.append(f'{url}?ptzcmd&abs&24&20&{pan_api_fillin}&{tilt_api_fillin}')
             trace.append(commands)
-    print(trace)
+    with open('api_trace.txt', 'w') as f:
+        for t in trace:
+            f.write(str(t).replace('\'', '').replace('[', '').replace(']','') + '\n')
                 
                  
 
 def main():
-    convert_orientations('180-0-1', 'orientations.txt')
+    convert_orientations('120-0-1', 'orientations.txt')
 
 
 if __name__ == '__main__':
